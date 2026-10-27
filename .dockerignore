@@ -5,3 +5,10 @@ dist
 tests
 INICIAR.cmd
 *.log
+.env
+.env.*
+*.csv
+data
+backups
+*respaldo*.json
+*recuperacion*.json

@@ -32,7 +32,24 @@ Esta aplicación incluye empaquetado nativo para Umbrel OS:
 - Tienda comunitaria: `umbrel-app-store.yml`
 - Imagen de contenedor multi-arquitectura: `ghcr.io/mandebitcoin/uber-driver-ai` (puerto `5174` en Umbrel).
 
-## 4. Tu primer recorrido, paso a paso
+## 4. Coolify (servidor propio)
+
+La imagen es estática: nginx entrega la aplicación y los registros siguen en el navegador de cada dispositivo. El servidor no guarda datos, no necesita volumen ni variables de entorno.
+
+1. En Coolify: **+ New** → **Public Repository** (o **Private Repository (GitHub App)** si haces el repo privado).
+2. URL: `https://github.com/ManDeBitcoin/uber-driver-ai`, rama `main` (o la rama que quieras desplegar).
+3. **Build Pack**: `Dockerfile`. **Base Directory**: `/`. **Dockerfile Location**: `/Dockerfile`.
+4. **Ports Exposes**: `80`. No publiques puertos en el host (deja **Ports Mappings** vacío); Coolify enruta por dominio.
+5. **Domains**: tu dominio con `https://` (por ejemplo `https://bitacora.tudominio.com`). Coolify emite el certificado.
+6. **Health Check**: activado, ruta `/health`, puerto `80`.
+7. **Deploy**. Para actualizar, vuelve a desplegar (o activa el despliegue automático con el webhook de GitHub).
+
+Notas:
+- Tu dominio de Coolify es una dirección distinta de `127.0.0.1:5173` y de Umbrel: empieza vacía. Pasa tus datos con **Descargar respaldo** y **Restaurar respaldo real**.
+- La aplicación queda accesible en internet para quien conozca el dominio. No expone registros de nadie (viven en cada navegador), pero si prefieres que solo tú la abras, protege el dominio con autenticación básica en el proxy de Coolify (middleware `basicauth` de Traefik mediante etiquetas personalizadas) o déjala detrás de una VPN.
+- `index.html` se sirve sin caché y los archivos de `/assets/` con caché larga, así que cada despliegue se ve al recargar.
+
+## 5. Tu primer recorrido, paso a paso
 
 1. Entra en **Resumen**. La app inicia en tus registros reales (vacíos por defecto: $0 / 0 viajes / 0 cargas).
 2. Haz clic en **Configurar vehículo** en la barra lateral o ve a **Mis datos → Tu Vehículo y Preferencias** para ingresar el modelo de tu auto, placa opcional y tu ciudad. Se guardan solo en tu navegador.
@@ -44,14 +61,14 @@ Esta aplicación incluye empaquetado nativo para Umbrel OS:
 8. En **Mis datos**, pulsa **Descargar respaldo** y guarda una copia JSON regularmente. Si pasan más de 7 días con cambios nuevos, Resumen te lo recuerda.
 9. Cada mes, descarga el **Reporte del mes** (CSV) para tu contador.
 
-## 5. Privacidad y almacenamiento local
+## 6. Privacidad y almacenamiento local
 
 - Los registros personales viven en `localStorage` bajo la clave `uber-driver-ai:real:v1` (formato interno versión 2, con migración automática desde la versión 1; el original se copia en `uber-driver-ai:real:v1:respaldo-AAAA-MM-DD`).
 - La configuración (vehículo, metas, intervalos de mantenimiento y fecha del último respaldo) vive en `uber-driver-ai:settings:v1`. No va dentro del respaldo JSON.
 - Ningún dato personal (tu carro, tu ciudad, tus placas, tus ingresos ni tus reportes CSV) se incluye en el código ni se transmite a servidores remotos.
 - El repositorio público se mantiene limpio y sin información privada.
 
-## 6. Comprobar el proyecto
+## 7. Comprobar el proyecto
 
 ```powershell
 npm.cmd test

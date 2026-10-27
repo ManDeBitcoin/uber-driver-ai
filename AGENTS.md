@@ -15,3 +15,4 @@ Aplicación personal local para un conductor principiante en Windows, con Kia St
 - La versión actual no llama a un modelo de IA y no requiere API keys. No incluyas claves en el frontend.
 - No publiques código o datos ni actives acceso de red externo salvo que el usuario lo solicite.
 - No incluyas datos personales, CSV ni respaldos reales en Git. El proyecto se mantiene local y privado.
+- Umbrel y Coolify usan el mismo Dockerfile: nginx estático en el puerto 80, healthcheck en /health y encabezados de seguridad en nginx-security-headers.conf. El servidor no guarda registros.

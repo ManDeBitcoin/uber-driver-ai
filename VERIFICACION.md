@@ -22,3 +22,10 @@ Equipo Linux; Node 24.19.0.
 - Revisión en Chromium sin interfaz: carga de datos v1 en localStorage, guardado de jornada con odómetro (rechazo de odómetro invertido), copia de migración creada, validación de porcentajes, intervalos y avisos de mantenimiento, descarga del reporte mensual, vista de 390 px sin desplazamiento horizontal y sin errores de consola.
 - No probado de extremo a extremo: importación de un CSV real de Uber con horas (solo muestras sintéticas en pruebas), restauración mediante el selector de archivos.
 - Pendiente: mejora 9 (datos guardados en Umbrel), que requiere autorización de acceso de red.
+
+## Despliegue en Coolify (27 de octubre de 2026)
+
+- Imagen Docker construida y ejecutada localmente: `/health` responde 200 y el healthcheck del contenedor queda `healthy`; rutas como `/jornadas` caen en `index.html`.
+- Encabezados verificados con curl: CSP, X-Frame-Options, nosniff, Referrer-Policy y Permissions-Policy en todas las respuestas; `index.html` con `no-cache` y `/assets/` con caché de un año (un solo Cache-Control).
+- La aplicación carga en Chromium con la CSP activa, sin errores de consola, y la descarga del respaldo funciona.
+- No probado: despliegue real en una instancia de Coolify ni el certificado HTTPS del dominio.

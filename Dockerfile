@@ -1,3 +1,5 @@
+# Imagen para Umbrel OS y Coolify (build pack Dockerfile, puerto 80, healthcheck /health).
+
 # Etapa 1: Compilar la aplicación React + TypeScript con Vite
 FROM node:22-alpine AS builder
 
@@ -19,6 +21,7 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 
 # Configuración de Nginx optimizada para SPA
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx-security-headers.conf /etc/nginx/snippets/security-headers.conf
 
 EXPOSE 80
 
