@@ -1,5 +1,5 @@
-import type { Shift } from './domain.ts';
-import { validDate, validShift } from './domain.ts';
+import type { Shift, SlotName, Slots } from './domain.ts';
+import { SLOT_NAMES, validDate, validShift } from './domain.ts';
 
 export type UberImportResult = {
   shifts: Shift[];
@@ -125,6 +125,32 @@ export function parseDateString(val: string): string | null {
   return null;
 }
 
+/** Fecha y hora local (America/Guayaquil). Si trae zona (Z o -05:00) se convierte; si no, se toma tal cual. */
+export function parseDateTime(val: string): { date: string; hour: number | null } | null {
+  const trimmed = (val || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})$/i.test(trimmed)) {
+    const time = Date.parse(trimmed);
+    if (Number.isNaN(time)) return null;
+    const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Guayaquil', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(time)).map(p => [p.type, p.value]));
+    return { date: `${parts.year}-${parts.month}-${parts.day}`, hour: Number(parts.hour) };
+  }
+  const date = parseDateString(trimmed);
+  if (!date) return null;
+  return { date, hour: parseHour(trimmed.slice(trimmed.split(/[\sT]/)[0].length)) };
+}
+
+/** Hora 0-23 de textos como "14:32", "8:05:00", "8:30 PM" o "8:30 p. m."; null si no hay hora. */
+export function parseHour(val: string): number | null {
+  const match = (val || '').match(/(\d{1,2}):(\d{2})(?::\d{2})?\s*([ap])?\.?\s*(m\.?)?/i);
+  if (!match) return null;
+  let hour = Number(match[1]);
+  const suffix = match[3] && match[4] ? match[3].toLowerCase() : '';
+  if (suffix) { if (hour < 1 || hour > 12) return null; hour = hour % 12 + (suffix === 'p' ? 12 : 0); }
+  return hour <= 23 ? hour : null;
+}
+
+export const slotForHour = (hour: number): SlotName => hour < 6 ? 'madrugada' : hour < 12 ? 'manana' : hour < 18 ? 'tarde' : 'noche';
+
 export function parseNumericValue(val: string): number {
   if (!val) return 0;
   // Strip common currency words, symbols and whitespace
@@ -185,6 +211,7 @@ export function parseDurationToHours(val: string, defaultIsMinutes = false): num
 
 type ColumnMapping = {
   dateCol: number;
+  timeCol: number;
   incomeCol: number;
   tripsCol: number;
   kmCol: number;
@@ -199,6 +226,7 @@ function identifyColumns(header: string[]): ColumnMapping {
   const norm = header.map(normalizeHeader);
 
   let dateCol = -1;
+  let timeCol = -1;
   let incomeCol = -1;
   let tripsCol = -1;
   let kmCol = -1;
@@ -225,6 +253,9 @@ function identifyColumns(header: string[]): ColumnMapping {
       break;
     }
   }
+
+  // 1b. Separate time column (e.g. "Hora"), not "Horas en línea"
+  timeCol = norm.findIndex((h, i) => i !== dateCol && (h === 'hora' || h === 'time' || h.startsWith('hora de') || h.startsWith('hora del')));
 
   // 2. Trips count column (if daily aggregated)
   for (let i = 0; i < norm.length; i++) {
@@ -284,22 +315,19 @@ function identifyColumns(header: string[]): ColumnMapping {
     }
   }
 
-  // 5. Duration column
-  for (let i = 0; i < norm.length; i++) {
+  // 5. Duration column (prefer explicit duration; never the date or time column)
+  const durationMatchers = [
+    (h: string) => h.includes('duracion') || h.includes('duration'),
+    (h: string) => h.includes('tiempo') || h.includes('time') || h.includes('horas') || h.includes('hours'),
+  ];
+  for (const matches of durationMatchers) {
+    const i = norm.findIndex((h, idx) => idx !== dateCol && idx !== timeCol && matches(h));
+    if (i === -1) continue;
     const h = norm[i];
-    if (
-      h.includes('duracion') ||
-      h.includes('duration') ||
-      h.includes('tiempo') ||
-      h.includes('time') ||
-      h.includes('horas') ||
-      h.includes('hours')
-    ) {
-      durationCol = i;
-      if (h.includes('min')) isMinutes = true;
-      if (h.includes('hora') || h.includes('hour')) isDurationHours = true;
-      break;
-    }
+    durationCol = i;
+    if (h.includes('min')) isMinutes = true;
+    if (h.includes('hora') || h.includes('hour')) isDurationHours = true;
+    break;
   }
 
   // 6. Other costs
@@ -313,6 +341,7 @@ function identifyColumns(header: string[]): ColumnMapping {
 
   return {
     dateCol,
+    timeCol,
     incomeCol,
     tripsCol,
     kmCol,
@@ -347,7 +376,9 @@ export function parseUberCsv(csvText: string): UberImportResult {
     km: number;
     hours: number;
     otherCosts: number;
+    slots: Slots | null;
   };
+  const emptySlots = () => Object.fromEntries(SLOT_NAMES.map(n => [n, { income: 0, trips: 0, hours: 0 }])) as Slots;
 
   const daysMap = new Map<string, DayAccumulator>();
   let validRowsCount = 0;
@@ -356,9 +387,11 @@ export function parseUberCsv(csvText: string): UberImportResult {
     const row = rows[r];
     if (row.length <= mapping.dateCol) continue;
 
-    const rawDate = row[mapping.dateCol];
-    const date = parseDateString(rawDate);
-    if (!date) continue; // Skip rows with invalid date (e.g. totals or empty)
+    const parsedDate = parseDateTime(row[mapping.dateCol]);
+    if (!parsedDate) continue; // Skip rows with invalid date (e.g. totals or empty)
+    const { date } = parsedDate;
+    // Trips crossing midnight stay on the request date and slot.
+    const hour = parsedDate.hour ?? (mapping.timeCol !== -1 ? parseHour(row[mapping.timeCol] ?? '') : null);
 
     const incomeVal = mapping.incomeCol !== -1 ? parseNumericValue(row[mapping.incomeCol]) : 0;
     const kmVal = mapping.kmCol !== -1 ? parseNumericValue(row[mapping.kmCol]) : 0;
@@ -383,7 +416,8 @@ export function parseUberCsv(csvText: string): UberImportResult {
       income: 0,
       km: 0,
       hours: 0,
-      otherCosts: 0
+      otherCosts: 0,
+      slots: null
     };
 
     current.trips += tripsVal;
@@ -391,6 +425,13 @@ export function parseUberCsv(csvText: string): UberImportResult {
     current.km += actualKm;
     current.hours += durationHours;
     current.otherCosts += otherCostsVal;
+    if (hour !== null) {
+      current.slots ??= emptySlots();
+      const slot = current.slots[slotForHour(hour)];
+      slot.income += incomeVal;
+      slot.trips += tripsVal;
+      slot.hours += durationHours;
+    }
 
     daysMap.set(date, current);
     validRowsCount++;
@@ -426,7 +467,15 @@ export function parseUberCsv(csvText: string): UberImportResult {
       km: roundedKm,
       income: Math.max(0, roundedIncome),
       otherCosts: Math.max(0, roundedOtherCosts),
-      notes: `Importado de Uber (${acc.trips} viajes)`
+      notes: `Importado de Uber (${acc.trips} viajes)`,
+      odometerStart: null,
+      odometerEnd: null,
+      setAside: 0,
+      slots: acc.slots && Object.fromEntries(SLOT_NAMES.map(n => [n, {
+        income: Math.max(0, Math.round(acc.slots![n].income * 100) / 100),
+        trips: acc.slots![n].trips,
+        hours: Math.min(24, Math.round(acc.slots![n].hours * 100) / 100)
+      }])) as Slots
     };
 
     if (validShift(shiftCandidate)) {

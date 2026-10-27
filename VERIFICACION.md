@@ -12,3 +12,13 @@ Fecha: 19 de octubre de 2026. Equipo Windows; Node 26.2.0.
 - Repositorio Git local, sin remoto ni publicación.
 
 Pendiente para próximas etapas: CSV real de Uber, consumo mediante tanque lleno, sincronización autenticada con iPhone, modelo de IA y cualquier alojamiento remoto.
+
+## Mejoras de octubre (27 de octubre de 2026)
+
+Equipo Linux; Node 24.19.0.
+
+- 45 pruebas automatizadas aprobadas (`npm test`), TypeScript y compilación de producción aprobados (`npm run build`).
+- Migración: respaldo v1 anonimizado (`tests/fixtures/respaldo-v1-anonimizado.json`) se convierte a v2; la primera escritura copia el original a `uber-driver-ai:real:v1:respaldo-AAAA-MM-DD`; datos dañados no se sobrescriben; ida y vuelta de respaldo v2.
+- Revisión en Chromium sin interfaz: carga de datos v1 en localStorage, guardado de jornada con odómetro (rechazo de odómetro invertido), copia de migración creada, validación de porcentajes, intervalos y avisos de mantenimiento, descarga del reporte mensual, vista de 390 px sin desplazamiento horizontal y sin errores de consola.
+- No probado de extremo a extremo: importación de un CSV real de Uber con horas (solo muestras sintéticas en pruebas), restauración mediante el selector de archivos.
+- Pendiente: mejora 9 (datos guardados en Umbrel), que requiere autorización de acceso de red.

@@ -6,7 +6,7 @@ Aplicación personal local para un conductor principiante en Windows, con Kia St
 - Mantén React + TypeScript y el arranque mediante INICIAR.cmd. Usa npm.cmd en PowerShell.
 - Ejecuta npm.cmd test y npm.cmd run build cuando cambies cálculos, almacenamiento o formularios.
 - Conserva la separación de demostración y datos reales. No sobrescribas datos dañados al iniciar.
-- El almacenamiento real está en localStorage, clave stonic-driver-ai:real:v1. Cambiarla exige migración y respaldo.
+- El almacenamiento real está en localStorage, clave uber-driver-ai:real:v1, con formato interno version 2. Se migra solo desde version 1 y desde stonic-driver-ai:real:v1; antes de la primera escritura se copia el original en uber-driver-ai:real:v1:respaldo-AAAA-MM-DD. Cambiar la clave o el formato exige migración y respaldo.
 - Usa USD, kilómetros, galones estadounidenses y fechas locales de America/Guayaquil.
 - Distingue ingresos del conductor, compras de combustible y saldo registrado. No etiquetes el saldo como utilidad neta.
 - Mantén el servidor en 127.0.0.1:5173 con strictPort para conservar el origen del almacenamiento.

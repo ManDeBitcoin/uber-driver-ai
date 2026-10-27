@@ -1,0 +1,15 @@
+{
+  "app": "uber-driver-ai",
+  "mode": "real",
+  "exportedAt": "2026-10-19T23:10:00.000Z",
+  "data": {
+    "version": 1,
+    "shifts": [
+      { "id": "0b6f2c1e-1111-4a8e-9c1a-000000000001", "date": "2026-10-17", "hours": 6.5, "km": 112.4, "trips": 14, "income": 71.35, "otherCosts": 1.5, "notes": "Importado de Uber (14 viajes)" },
+      { "id": "0b6f2c1e-1111-4a8e-9c1a-000000000002", "date": "2026-10-18", "hours": 7, "km": 128, "trips": 17, "income": 84.2, "otherCosts": 0, "notes": "" }
+    ],
+    "fuel": [
+      { "id": "0b6f2c1e-2222-4a8e-9c1a-000000000003", "date": "2026-10-18", "gallons": 8.214, "cost": 23.4, "odometer": 31250, "notes": "Recibo 000" }
+    ]
+  }
+}

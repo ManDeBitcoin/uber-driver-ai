@@ -26,3 +26,35 @@
 .vehicle-btn strong{font-size:13px;color:#fff}
 .vehicle-btn small{display:block;color:#acc3b8;margin-top:4px;font-size:11px}
 
+select{font:inherit;width:100%;min-width:0;border:1px solid #cbd6c2;background:#fcfdf9;border-radius:7px;padding:12px;color:#26492f}
+select:focus-visible{outline:3px solid #bd752f;outline-offset:3px}
+.stat strong{overflow-wrap:anywhere}
+.checks{display:flex;flex-direction:column;gap:12px;justify-content:center}
+.check{display:flex;gap:10px;align-items:flex-start;font-size:12px;font-weight:600;color:#3b5739;cursor:pointer}
+.check input{width:18px;height:18px;margin:0;flex-shrink:0;accent-color:#194e41}
+.check small{display:block;font-weight:400;color:#76816b;font-size:11px;line-height:1.5;margin-top:3px}
+.form-grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}
+.progress{height:8px;background:#e8ece3;border-radius:4px;overflow:hidden;margin:0 0 10px}
+.progress i{display:block;height:100%;background:#32674f;border-radius:4px}
+div.alert{margin:14px 0}
+.alert.warning{background:#fff9e6;color:#785412;border-color:#e8d08c}
+.alert-action{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
+.alert-action .outline{padding:8px 14px;font-size:12px}
+.hbars{display:grid;gap:10px;margin-top:12px}
+.hbar{display:grid;grid-template-columns:90px minmax(0,1fr) 120px 170px;align-items:center;gap:12px;font-size:12px;color:#5c6e54}
+.hbar-track{height:12px;background:#eff2eb;border-radius:4px;overflow:hidden}
+.hbar-track i{display:block;height:100%;background:#32674f;border-radius:4px}
+.hbar b{color:#27533d;font-weight:650}
+.hbar small{color:#8a9483;font-size:11px}
+.status-list{list-style:none;padding:0;margin:0;display:grid;gap:8px;font-size:13px;color:#5c6e54}
+.status-list li{padding:10px 14px;border-radius:8px;background:#f4f7f0;border:1px solid #e2e8dd}
+.status-list li b{display:inline-block;min-width:92px;color:#27533d}
+.status-list li.pronto{background:#fff9e6;border-color:#e8d08c}
+.status-list li.pronto b{color:#785412}
+.status-list li.vencido{background:#fff0e9;border-color:#e6bda9}
+.status-list li.vencido b{color:#933f28}
+.interval-grid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) minmax(0,1fr);gap:10px 12px;align-items:center;margin:18px 0 0;font-size:12px;color:#3b5739}
+.interval-grid b{font-size:10px;letter-spacing:.8px;text-transform:uppercase;color:#78856f}
+.interval-row{display:contents}
+.interval-row input{padding:9px}
+@media(max-width:580px){.hbar{grid-template-columns:80px minmax(0,1fr);row-gap:4px}.hbar b,.hbar small{grid-column:2}.form-grid.two{grid-template-columns:1fr}}
