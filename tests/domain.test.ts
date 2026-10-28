@@ -1,12 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { byWeekday, defaultSettings, demoData, emptyData, envelopes, filterData, fuelEconomy, fuelOdometerProblem, maintenanceMessage, maintenanceStatus, monthlyReport, newId, parseBackup, parseData, parseSettings, settingsProblem, shiftProblem, summarize, validDate, validFuel, validShift } from '../src/domain.ts';
-import type { Data, Fuel, Intervals, Maintenance, Shift } from '../src/domain.ts';
+import { byWeekday, defaultSettings, demoData, emptyData, envelopes, filterData, fuelEconomy, fuelOdometerProblem, maintenanceMessage, maintenanceStatus, monthlyReport, newId, parseBackup, parseData, parseSettings, settingsProblem, shiftProblem, summarize, validDate, validExpense, validFuel, validShift } from '../src/domain.ts';
+import type { Data, Expense, Fuel, Intervals, Maintenance, Shift } from '../src/domain.ts';
 
 const shift: Shift = { id: 'one', date: '2026-10-19', hours: 5, km: 100, trips: 12, income: 50.10, otherCosts: 2.20, notes: '', odometerStart: null, odometerEnd: null, setAside: 0, slots: null };
 const fuel = (id: string, date: string, odometer: number, gallons: number, fullTank: boolean, cost = 25): Fuel => ({ id, date, gallons, cost, odometer, notes: '', fullTank, invoice: false, supplier: '' });
 const maintenance = (id: string, date: string, odometer: number, type: Maintenance['type'] = 'aceite', cost = 40): Maintenance => ({ id, date, odometer, type, cost, notes: '', invoice: false, supplier: '' });
+const expense = (id: string, date: string, category: Expense['category'] = 'cuota', cost = 300, invoice = false): Expense => ({ id, date, category, cost, notes: '', invoice, supplier: '' });
 const data = (patch: Partial<Data>): Data => ({ ...emptyData(), ...patch });
 const v1Backup = readFileSync(new URL('./fixtures/respaldo-v1-anonimizado.json', import.meta.url), 'utf8');
 
@@ -22,11 +23,12 @@ test('conserva saldos negativos; una carga sin jornadas no inventa ingresos', ()
   assert.equal(result.perHour, null);
 });
 test('rango de fechas inclusivo y aplicado también al combustible y mantenimiento', () => {
-  const all = data({ shifts: [shift, { ...shift, id: 'old', date: '2026-10-18' }], fuel: [fuel('f', '2026-10-18', 100, 3, false)], maintenance: [maintenance('m', '2026-10-18', 100)] });
+  const all = data({ shifts: [shift, { ...shift, id: 'old', date: '2026-10-18' }], fuel: [fuel('f', '2026-10-18', 100, 3, false)], maintenance: [maintenance('m', '2026-10-18', 100)], expenses: [expense('e', '2026-10-18'), expense('e2', '2026-10-19')] });
   const filtered = filterData(all, '2026-10-19', '2026-10-19');
   assert.deepEqual(filtered.shifts, [shift]);
   assert.deepEqual(filtered.fuel, []);
   assert.deepEqual(filtered.maintenance, []);
+  assert.deepEqual(filtered.expenses.map(e => e.id), ['e2']);
 });
 test('rechaza fechas imposibles, cifras negativas e infinitas y viajes fraccionarios', () => {
   assert.equal(validDate('2026-02-30'), false);
@@ -38,21 +40,30 @@ test('rechaza fechas imposibles, cifras negativas e infinitas y viajes fracciona
   assert.equal(validShift({ ...shift, trips: 1.5 }), false);
   assert.equal(validFuel({ ...fuel('f', shift.date, 0, 0, false), cost: 2 }), false);
 });
-test('el respaldo real v2 completa un ciclo sin perder datos', () => {
+test('el respaldo real v3 completa un ciclo sin perder datos', () => {
   const demo = demoData();
   assert.deepEqual(parseBackup(JSON.stringify({ app: 'uber-driver-ai', mode: 'real', data: demo })), demo);
-  const withAll = data({ shifts: [{ ...shift, odometerStart: 1000, odometerEnd: 1150, setAside: 8, slots: { madrugada: { income: 0, trips: 0, hours: 0 }, manana: { income: 20, trips: 4, hours: 1.2 }, tarde: { income: 30.1, trips: 8, hours: 2 }, noche: { income: 0, trips: 0, hours: 0 } } }], fuel: [{ ...fuel('f', shift.date, 1150, 8, true), invoice: true, supplier: 'Estación' }], maintenance: [maintenance('m', shift.date, 1100)] });
+  const withAll = data({ shifts: [{ ...shift, odometerStart: 1000, odometerEnd: 1150, setAside: 8, slots: { madrugada: { income: 0, trips: 0, hours: 0 }, manana: { income: 20, trips: 4, hours: 1.2 }, tarde: { income: 30.1, trips: 8, hours: 2 }, noche: { income: 0, trips: 0, hours: 0 } } }], fuel: [{ ...fuel('f', shift.date, 1150, 8, true), invoice: true, supplier: 'Estación' }], maintenance: [maintenance('m', shift.date, 1100)], expenses: [{ ...expense('e', shift.date, 'seguro', 45.5, true), supplier: 'Aseguradora', notes: 'Mensual' }] });
   assert.deepEqual(parseBackup(JSON.stringify({ app: 'uber-driver-ai', mode: 'real', data: withAll })), withAll);
 });
-test('migra un respaldo v1 a v2 con los campos nuevos vacíos', () => {
+test('migra un respaldo v1 a v3 con los campos nuevos vacíos', () => {
   const migrated = parseBackup(v1Backup);
-  assert.equal(migrated.version, 2);
+  assert.equal(migrated.version, 3);
   assert.equal(migrated.shifts.length, 2);
   assert.deepEqual(migrated.maintenance, []);
+  assert.deepEqual(migrated.expenses, []);
   for (const s of migrated.shifts) { assert.equal(s.odometerStart, null); assert.equal(s.odometerEnd, null); assert.equal(s.setAside, 0); assert.equal(s.slots, null); }
   assert.deepEqual(migrated.fuel.map(f => [f.fullTank, f.invoice, f.supplier]), [[false, false, '']]);
   assert.equal(summarize(migrated).income, 155.55);
   assert.deepEqual(parseData(JSON.parse(JSON.stringify(migrated))), migrated);
+});
+test('migra datos v2 a v3 sin tocar jornadas, cargas ni mantenimiento', () => {
+  const current = data({ shifts: [shift], fuel: [fuel('f', shift.date, 1000, 8, true)], maintenance: [maintenance('m', shift.date, 1000)] });
+  const { expenses, ...rest } = current;
+  assert.deepEqual(expenses, []);
+  const v2 = { ...rest, version: 2 };
+  assert.deepEqual(parseData(v2), current);
+  assert.deepEqual(parseBackup(JSON.stringify({ app: 'uber-driver-ai', mode: 'real', data: v2 })), current);
 });
 test('no permite importar una demostración como registros reales', () => {
   assert.throws(() => parseBackup(JSON.stringify({ app: 'stonic-driver-ai', mode: 'demo', data: demoData() })), /reales/);
@@ -60,6 +71,9 @@ test('no permite importar una demostración como registros reales', () => {
 test('rechaza archivos rotos, versiones desconocidas e identificadores duplicados', () => {
   assert.throws(() => parseBackup('{'));
   assert.throws(() => parseData({ version: 3, shifts: [], fuel: [], maintenance: [] }));
+  assert.throws(() => parseData({ version: 4, shifts: [], fuel: [], maintenance: [], expenses: [] }));
+  assert.throws(() => parseData(data({ shifts: [shift], expenses: [expense('one', shift.date)] })), /duplicados/);
+  assert.throws(() => parseData(data({ expenses: [{ ...expense('e', shift.date), category: 'comida' as Expense['category'] }] })));
   assert.throws(() => parseData({ version: 2, shifts: [], fuel: [] }));
   assert.throws(() => parseData(data({ shifts: [shift, shift] })), /duplicados/);
   assert.throws(() => parseData(data({ shifts: [shift], maintenance: [maintenance('one', shift.date, 10)] })), /duplicados/);
@@ -70,7 +84,7 @@ test('los datos de ejemplo son válidos, independientes y suman correctamente', 
   const demo = demoData();
   assert.deepEqual(parseData(demo), demo);
   assert.equal(summarize(demo).income, 626.50);
-  assert.equal(summarize(demo).balance, 568);
+  assert.equal(summarize(demo).balance, 553);
   assert.equal(summarize(demo).hours, 45);
   assert.ok(fuelEconomy(demo.fuel).kmPerGallon! > 0);
   demo.shifts.pop();
@@ -205,6 +219,20 @@ test('mejores días: solo compara días con al menos 3 jornadas', () => {
   assert.equal(byWeekday(mondays, 0.05)[1].perHour, 55 / 6);
 });
 
+test('gastos fijos: se restan del saldo y entran en el gasto por km', () => {
+  const result = summarize(data({ shifts: [shift], expenses: [expense('e', shift.date, 'cuota', 30), expense('e2', shift.date, 'celular', 10.25)] }));
+  assert.equal(result.expenses, 40.25);
+  assert.equal(result.balance, 7.65);
+  assert.ok(Math.abs(result.costPerKm! - 0.4245) < 1e-9);
+  assert.equal(summarize(data({ expenses: [expense('e', shift.date, 'seguro', 45)] })).balance, -45);
+});
+test('gastos fijos: rechaza montos en cero, negativos o fechas inválidas', () => {
+  assert.equal(validExpense(expense('e', shift.date)), true);
+  assert.equal(validExpense(expense('e', shift.date, 'cuota', 0)), false);
+  assert.equal(validExpense(expense('e', shift.date, 'cuota', -5)), false);
+  assert.equal(validExpense(expense('e', '2026-02-30')), false);
+  assert.equal(validExpense({ ...expense('e', shift.date), supplier: 'x'.repeat(121) }), false);
+});
 test('reporte mensual: mes sin registros solo trae encabezado y totales en cero', () => {
   const lines = monthlyReport(emptyData(), '2026-10').replace('﻿', '').trim().split('\r\n');
   assert.equal(lines[0], 'Fecha;Tipo;Concepto;Proveedor;Factura;Ingreso;Gasto;Km;Horas;Nota');
@@ -216,12 +244,14 @@ test('reporte mensual: separa gastos con y sin factura y escapa caracteres espec
     shifts: [{ ...shift, notes: 'Nota; con "comillas"\ny salto' }, { ...shift, id: 'otro-mes', date: '2026-09-30' }],
     fuel: [{ ...fuel('f', '2026-10-19', 1000, 8, true, 24.5), invoice: true, supplier: '=HYPERLINK("x")' }],
     maintenance: [maintenance('m', '2026-10-20', 1100, 'aceite', 40)],
+    expenses: [expense('e', '2026-10-05', 'cuota', 300, true), expense('e2', '2026-10-10', 'celular', 15), expense('e3', '2026-09-05', 'cuota', 300, true)],
   }), '2026-10');
   assert.ok(report.includes('"Nota; con ""comillas""\ny salto"'));
   assert.ok(report.includes(`"'=HYPERLINK(""x"")"`));
   assert.ok(report.includes(';Total;Ingresos;;;50,10;'));
-  assert.ok(report.includes(';Total;Gastos con factura;;Sí;0,00;24,50;'));
-  assert.ok(report.includes(';Total;Gastos sin factura;;No;0,00;42,20;'));
+  assert.ok(report.includes('2026-10-05;Gasto fijo;Cuota o préstamo del vehículo;;Sí;0,00;300,00;'));
+  assert.ok(report.includes(';Total;Gastos con factura;;Sí;0,00;324,50;'));
+  assert.ok(report.includes(';Total;Gastos sin factura;;No;0,00;57,20;'));
   assert.ok(!report.includes('2026-09-30'));
 });
 

@@ -1,12 +1,12 @@
 import { useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
-import { byWeekday, bySlot, currentOdometer, dateLabel, demoData, emptyData, envelopes, estimatedProfit, filterData, fuelEconomy, fuelOdometerProblem, MAINTENANCE_LABELS, MAINTENANCE_TYPES, maintenanceMessage, maintenanceStatus, money, monthlyReport, newId, number, parseBackup, parseData, parseSettings, SETTINGS_KEY, settingsProblem, shiftProblem, shiftTotalKm, summarize, today, validFuel, validMaintenance, validShift } from './domain.ts';
-import type { Backup, Data, Fuel, Intervals, Maintenance, MaintenanceType, Settings, Shift } from './domain.ts';
+import { byWeekday, bySlot, currentOdometer, dateLabel, demoData, emptyData, envelopes, estimatedProfit, EXPENSE_CATEGORIES, EXPENSE_LABELS, filterData, fuelEconomy, fuelOdometerProblem, MAINTENANCE_LABELS, MAINTENANCE_TYPES, maintenanceMessage, maintenanceStatus, money, monthlyReport, newId, number, parseBackup, parseData, parseSettings, SETTINGS_KEY, settingsProblem, shiftProblem, shiftTotalKm, summarize, today, validExpense, validFuel, validMaintenance, validShift } from './domain.ts';
+import type { Backup, Data, Expense, ExpenseCategory, Fuel, Intervals, Maintenance, MaintenanceType, Settings, Shift } from './domain.ts';
 import { loadData, saveData } from './storage.ts';
 import { parseUberCsv } from './uberCsv.ts';
 import type { UberImportResult } from './uberCsv.ts';
 
-type Tab = 'Resumen' | 'Jornadas' | 'Combustible' | 'Mantenimiento' | 'Mis datos';
+type Tab = 'Resumen' | 'Jornadas' | 'Combustible' | 'Mantenimiento' | 'Gastos' | 'Mis datos';
 function loadSettings(): Settings {
   try { return parseSettings(JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null')); } catch { return parseSettings(null); }
 }
@@ -24,6 +24,7 @@ function Icon({ kind }: { kind: string }) {
     Jornadas: <><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4m8-4v4M4 11h16m-12 5h3"/></>,
     Combustible: <><path d="M4 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16M2 21h14M4 10h10m0 3h2a2 2 0 0 1 2 2v2a2 2 0 0 0 4 0V9l-4-4"/><path d="M19 6v4h3"/></>,
     Mantenimiento: <path d="M14.7 6.3a4 4 0 0 0-5.4 5.1L3 17.7V21h3.3l6.3-6.3a4 4 0 0 0 5.1-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/>,
+    Gastos: <><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6m-6 4h6m-6 4h3"/></>,
     'Mis datos': <><path d="M12 3v12m-4-4 4 4 4-4M4 15v5h16v-5"/></>,
     car: <><path d="m4 10 2-6h12l2 6M3 17v3m18-3v3M2 10h20v7H2zM5 13h3m8 0h3"/></>,
     upload: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></>,
@@ -50,7 +51,8 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('Resumen');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  const [editing, setEditing] = useState<Shift | Fuel | Maintenance | null>(null);
+  const [editing, setEditing] = useState<Shift | Fuel | Maintenance | Expense | null>(null);
+  const [prefill, setPrefill] = useState<Expense | null>(null);
   const [formKey, setFormKey] = useState(0);
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -80,14 +82,15 @@ export default function App() {
   const slots = bySlot(filtered.shifts);
   const hasSlots = filtered.shifts.some(s => s.slots);
   const daysSinceBackup = settings.lastBackupAt ? Math.floor((Date.now() - Date.parse(settings.lastBackupAt)) / 86400000) : null;
-  const realCount = real.shifts.length + real.fuel.length + real.maintenance.length;
+  const realCount = real.shifts.length + real.fuel.length + real.maintenance.length + real.expenses.length;
   const backupDue = mode === 'real' && !loadError && realCount > 0 && (daysSinceBackup === null || (daysSinceBackup > 7 && settings.changedSinceBackup));
-  const tabs: Tab[] = ['Resumen', 'Jornadas', 'Combustible', 'Mantenimiento', 'Mis datos'];
+  const tabs: Tab[] = ['Resumen', 'Jornadas', 'Combustible', 'Mantenimiento', 'Gastos', 'Mis datos'];
   const headings: Record<Tab, [string, string]> = {
     Resumen: ['Tu camino, en números.', 'Una mirada clara a tu trabajo y a tu vehículo.'],
     Jornadas: ['Registra tu jornada.', 'Anota cómo te fue al terminar de conducir.'],
     Combustible: ['Cada carga, bajo control.', 'Lleva un historial de tus compras de combustible.'],
     Mantenimiento: ['Cuida tu vehículo.', 'Registra cada servicio y recibe avisos según el manual de tu vehículo.'],
+    Gastos: ['Gastos fijos, sin sorpresas.', 'Cuota, seguro, matrícula, celular y todo lo que pagas para poder trabajar.'],
     'Mis datos': ['Tus datos, contigo.', 'Guarda una copia y ajusta tus metas.'],
   };
   const recent = [...filtered.shifts].sort((a, b) => b.date.localeCompare(a.date));
@@ -95,8 +98,9 @@ export default function App() {
   const chartDates = [...new Set(filtered.shifts.map(s => s.date))].sort().slice(-7);
   const chart = chartDates.map(date => ({ date, income: summarize({ ...emptyData(), shifts: filtered.shifts.filter(s => s.date === date) }).income }));
   const maxIncome = Math.max(1, ...chart.map(c => c.income));
+  const expensesByCategory = EXPENSE_CATEGORIES.map(category => { const rows = filtered.expenses.filter(e => e.category === category); return { category, count: rows.length, total: summarize({ ...emptyData(), expenses: rows }).expenses }; }).filter(c => c.count > 0);
 
-  function navigate(next: Tab) { setTab(next); setEditing(null); setFormKey(k => k + 1); setMessage(''); setError(''); }
+  function navigate(next: Tab) { setTab(next); setEditing(null); setPrefill(null); setFormKey(k => k + 1); setMessage(''); setError(''); }
   function storeSettings(next: Settings) {
     try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(next)); } catch {}
     setSettings(next);
@@ -113,7 +117,7 @@ export default function App() {
       return true;
     } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo guardar. Descarga un respaldo antes de cerrar.'); return false; }
   }
-  function saved(noun: string, adjective = 'guardada') { setEditing(null); setFormKey(k => k + 1); setMessage(mode === 'demo' ? `${noun} de práctica ${adjective}. No afecta tus datos reales.` : `${noun} ${adjective} en este navegador.`); }
+  function saved(noun: string, adjective = 'guardada') { setEditing(null); setPrefill(null); setFormKey(k => k + 1); setMessage(mode === 'demo' ? `${noun} de práctica ${adjective}. No afecta tus datos reales.` : `${noun} ${adjective} en este navegador.`); }
   function saveShift(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); const form = new FormData(event.currentTarget);
     const s: Shift = { id: editing?.id ?? newId(), date: String(form.get('date')), hours: Number(form.get('hours')), km: Number(form.get('km')), trips: Number(form.get('trips')), income: Number(form.get('income')), otherCosts: Number(form.get('otherCosts')), notes: String(form.get('notes')).trim(), odometerStart: optionalNumber(form.get('odometerStart')), odometerEnd: optionalNumber(form.get('odometerEnd')), setAside: Number(form.get('setAside')), slots: (editing as Shift | null)?.slots ?? null };
@@ -139,11 +143,18 @@ export default function App() {
     if (!validMaintenance(m)) { setError('Revisa las cifras, el tipo y la fecha del mantenimiento.'); return; }
     if (commit({ ...data, maintenance: editing ? data.maintenance.map(r => r.id === m.id ? m : r) : [...data.maintenance, m] })) saved('Mantenimiento', 'guardado');
   }
-  function remove(id: string, kind: 'shifts' | 'fuel' | 'maintenance') {
+  function saveExpense(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); const form = new FormData(event.currentTarget);
+    const expense: Expense = { id: editing?.id ?? newId(), date: String(form.get('date')), category: String(form.get('category')) as ExpenseCategory, cost: Number(form.get('cost')), notes: String(form.get('notes')).trim(), invoice: form.get('invoice') === 'on', supplier: String(form.get('supplier') ?? '').trim() };
+    if (!validExpense(expense)) { setError('Revisa el monto, la categoría y la fecha del gasto.'); return; }
+    if (commit({ ...data, expenses: editing ? data.expenses.map(r => r.id === expense.id ? expense : r) : [...data.expenses, expense] })) saved('Gasto', 'guardado');
+  }
+  function remove(id: string, kind: 'shifts' | 'fuel' | 'maintenance' | 'expenses') {
     if (!window.confirm('¿Eliminar este registro? Esta acción no se puede deshacer.')) return;
     if (commit({ ...data, [kind]: data[kind].filter((r: { id: string }) => r.id !== id) })) { setEditing(null); setFormKey(k => k + 1); setMessage('Registro eliminado.'); }
   }
-  function edit(row: Shift | Fuel | Maintenance) { setEditing(row); setFormKey(k => k + 1); setMessage(''); setError(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+  function edit(row: Shift | Fuel | Maintenance | Expense) { setEditing(row); setPrefill(null); setFormKey(k => k + 1); setMessage(''); setError(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+  function repeat(row: Expense) { setEditing(null); setPrefill(row); setFormKey(k => k + 1); setError(''); setMessage('Copiamos el gasto con la fecha de hoy. Revisa el monto y guárdalo.'); window.scrollTo({ top: 0, behavior: 'smooth' }); }
   function exportBackup() {
     const backup: Backup = { app: 'uber-driver-ai', mode, exportedAt: new Date().toISOString(), data };
     download(JSON.stringify(backup, null, 2), mode === 'real' ? `uber-driver-ai-respaldo-${today()}.json` : `uber-driver-ai-respaldo-demo-${today()}.json`);
@@ -156,7 +167,7 @@ export default function App() {
       if (mode !== 'real') throw new Error('Cambia a Mis registros para restaurar un respaldo.');
       if (file.size > 10000000) throw new Error('El respaldo supera el máximo de 10 MB.');
       const restored = parseBackup(await file.text());
-      if (!window.confirm(`Este respaldo contiene ${restored.shifts.length} jornadas, ${restored.fuel.length} cargas y ${restored.maintenance.length} mantenimientos. Reemplazará tus ${real.shifts.length} jornadas, ${real.fuel.length} cargas y ${real.maintenance.length} mantenimientos actuales. ¿Restaurar?`)) return;
+      if (!window.confirm(`Este respaldo contiene ${restored.shifts.length} jornadas, ${restored.fuel.length} cargas, ${restored.maintenance.length} mantenimientos y ${restored.expenses.length} gastos fijos. Reemplazará tus ${real.shifts.length} jornadas, ${real.fuel.length} cargas, ${real.maintenance.length} mantenimientos y ${real.expenses.length} gastos fijos actuales. ¿Restaurar?`)) return;
       if (commit(restored, true)) setMessage('Respaldo restaurado correctamente.');
     } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo leer el respaldo.'); }
     finally { if (importRef.current) importRef.current.value = ''; }
@@ -230,7 +241,7 @@ export default function App() {
     download(monthlyReport(data, reportMonth), `uber-driver-ai-reporte-${reportMonth}.csv`, 'text/csv;charset=utf-8');
     setMessage(`Reporte de ${reportMonth} descargado.`);
   }
-  const editShift = editing as Shift | null; const editFuel = editing as Fuel | null; const editMaintenance = editing as Maintenance | null;
+  const editShift = editing as Shift | null; const editFuel = editing as Fuel | null; const editMaintenance = editing as Maintenance | null; const editExpense = (editing as Expense | null) ?? prefill;
   const formActions = (label: string) => <div className="form-actions"><button type="submit">{editing ? 'Guardar cambios' : label}</button>{editing && <button type="button" className="outline" onClick={() => { setEditing(null); setFormKey(k => k + 1); }}>Cancelar edición</button>}<small>{mode === 'demo' ? 'Se guardará solo en la demostración.' : 'Se guardará en este navegador.'}</small></div>;
 
   return <div className="app-shell">
@@ -263,16 +274,17 @@ export default function App() {
           {maintenanceAlerts.map(m => <div key={m.type} className={m.status === 'vencido' ? 'alert error alert-action' : 'alert warning alert-action'} role="status"><span>{maintenanceMessage(m)}</span><button className="outline" onClick={() => navigate('Mantenimiento')}>Ver mantenimiento</button></div>)}
           {longShifts > 0 && <p className="alert warning" role="status">{longShifts} jornada(s) del periodo superan tus {number(settings.maxHours)} horas máximas.</p>}
           <div className="stats">
-            <Stat featured label="Saldo registrado" value={money(stats.balance)} note="Ingresos − combustible − otros gastos − mantenimiento"/>
+            <Stat featured label="Saldo registrado" value={money(stats.balance)} note="Ingresos − combustible − otros gastos − mantenimiento − gastos fijos"/>
             <Stat label="Ingresos del conductor" value={money(stats.income)} note="Después de la comisión de la plataforma"/>
             <Stat label="Compras de combustible" value={money(stats.fuel)} note={`${filtered.fuel.length} cargas registradas`}/>
+            <Stat label="Gastos fijos" value={money(stats.expenses)} note={filtered.expenses.length ? `${filtered.expenses.length} pagos${filtered.shifts.length ? ` · ${money(stats.expenses / filtered.shifts.length)} por jornada trabajada` : ''}` : 'Cuota, seguro, matrícula, celular, etc.'}/>
             <Stat label="Ingresos por hora" value={stats.perHour === null ? '—' : money(stats.perHour)} note="Antes de combustible y otros gastos"/>
             <Stat label="Saldo por hora" value={stats.balancePerHour === null ? '—' : money(stats.balancePerHour)} note="Saldo registrado ÷ horas"/>
             <Stat label="Saldo por km" value={stats.balancePerKm === null ? '—' : perKm(stats.balancePerKm)} note={stats.shiftsWithoutOdometer ? `${stats.shiftsWithoutOdometer} jornada(s) sin odómetro usan km de viajes` : 'Saldo ÷ km totales del odómetro'}/>
-            <Stat label="Gasto por km" value={stats.costPerKm === null ? '—' : perKm(stats.costPerKm)} note="Combustible + otros gastos + mantenimiento ÷ km"/>
+            <Stat label="Gasto por km" value={stats.costPerKm === null ? '—' : perKm(stats.costPerKm)} note="Combustible + otros gastos + mantenimiento + gastos fijos ÷ km"/>
             <Stat label="Km sin pasajero" value={stats.emptyShare === null ? '—' : percent(stats.emptyShare)} note={stats.emptyKm === null ? 'Anota el odómetro al iniciar y al terminar' : `${number(stats.emptyKm)} km buscando pasajeros o de traslado`}/>
             <Stat label="Consumo real" value={economy.kmPerGallon === null ? '—' : `${number(Math.round(economy.kmPerGallon * 10) / 10)} km/gal`} note={economy.costPerKm === null ? 'Necesita dos cargas con tanque lleno' : `Combustible: ${perKm(economy.costPerKm)} por km`}/>
-            <Stat label="Ganancia estimada" value={profit === null ? '—' : money(profit)} note={profit === null ? 'Disponible con el consumo real' : 'Ingresos − km × costo de combustible − otros gastos. Sin mantenimiento.'}/>
+            <Stat label="Ganancia estimada" value={profit === null ? '—' : money(profit)} note={profit === null ? 'Disponible con el consumo real' : 'Ingresos − km × costo de combustible − otros gastos. Sin mantenimiento ni gastos fijos.'}/>
             <Stat label="Meta de hoy" value={settings.dailyGoal ? `${money(todayIncome)} / ${money(settings.dailyGoal)}` : '—'} note={settings.dailyGoal ? (todayIncome >= settings.dailyGoal ? '¡Meta cumplida!' : `Faltan ${money(settings.dailyGoal - todayIncome)}`) : 'Configura tu meta en Mis datos'}>{settings.dailyGoal > 0 && <div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(Math.min(1, todayIncome / settings.dailyGoal) * 100)}><i style={{ width: `${Math.min(100, todayIncome / settings.dailyGoal * 100)}%` }}/></div>}</Stat>
             <Stat label="Apartados del periodo" value={settings.maintenancePercent || settings.taxPercent ? `${money(envelope.setAside)} / ${money(envelope.suggested)}` : '—'} note={settings.maintenancePercent || settings.taxPercent ? `Deberías haber apartado ${money(envelope.maintenance)} para mantenimiento y ${money(envelope.taxes)} para impuestos` : 'Configura los porcentajes en Mis datos'}/>
           </div>
@@ -284,7 +296,7 @@ export default function App() {
             {weekdays.some(w => w.enough) ? <div className="hbars">{weekdayRows.map(w => <div className="hbar" key={w.day}><span>{w.name}</span><div className="hbar-track">{w.enough && w.perHour !== null && <i style={{ width: `${Math.max(2, w.perHour / maxWeekday * 100)}%` }}/>}</div><b>{w.enough && w.perHour !== null ? `${money(w.perHour)}/h` : `Pocos datos (${w.shifts})`}</b><small>{w.enough && w.tripsPerHour !== null ? `${number(Math.round(w.tripsPerHour * 10) / 10)} viajes/h · ${w.shifts} jornadas` : ''}</small></div>)}</div> : <p className="muted">Todavía no hay suficientes jornadas. Necesitas al menos 3 jornadas en un mismo día de la semana.</p>}
             {hasSlots && <><h2 style={{ marginTop: '22px' }}>Franjas horarias (CSV de Uber)</h2><p className="muted">Según la hora de solicitud de cada viaje. El ingreso por hora usa solo el tiempo en viaje, no las esperas.</p><div className="table-scroll"><table><thead><tr><th>Franja</th><th>Jornadas</th><th>Viajes</th><th>Ingresos</th><th>Ingreso por hora en viaje</th></tr></thead><tbody>{slots.map(s => <tr key={s.name}><td><strong>{s.label}</strong></td><td>{s.shifts}</td><td>{s.trips}</td><td>{money(s.income)}</td><td className="income-cell">{s.enough && s.perHour !== null ? money(s.perHour) : 'Pocos datos'}</td></tr>)}</tbody></table></div></>}
           </section>
-          <p className="calculation-note">El saldo registrado no es utilidad neta: resta compras de combustible, no consumo del período. Incluye el mantenimiento registrado, pero no depreciación, seguros ni impuestos salvo que los anotes como otros gastos. La ganancia estimada usa tu consumo real con tanque lleno. Los resúmenes son cálculos locales; esta versión todavía no incorpora un modelo de IA.</p>
+          <p className="calculation-note">El saldo registrado no es utilidad neta: resta compras de combustible, no consumo del período. Incluye el mantenimiento y los gastos fijos registrados (un pago anual, como la matrícula, cuenta completo en el mes en que lo pagas), pero no depreciación ni impuestos. La ganancia estimada usa tu consumo real con tanque lleno. Los resúmenes son cálculos locales; esta versión todavía no incorpora un modelo de IA.</p>
         </>}
         {tab === 'Jornadas' && <>
           <section className="panel"><div className="section-heading"><h2>{editing ? 'Editar jornada' : 'Nueva jornada'}</h2><div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}><button type="button" className="btn-import" onClick={() => uberFileRef.current?.click()}><Icon kind="upload"/> Importar de Uber (CSV)</button><span className="small-badge">REGISTRO MANUAL</span></div></div><form key={formKey} onSubmit={saveShift}><div className="form-grid">
@@ -327,8 +339,20 @@ export default function App() {
           </div><label className="field notes">Nota opcional<textarea name="notes" maxLength={500} defaultValue={editing?.notes} placeholder="Por ejemplo: aceite 5W-30, filtro incluido"/></label>{formActions('Guardar mantenimiento')}</form></section>
           <section className="panel"><div className="section-heading"><h2>Historial de mantenimiento</h2><span className="muted">{filtered.maintenance.length} registros · {money(stats.maintenance)}</span></div>{filtered.maintenance.length && !invalidRange ? <div className="table-scroll"><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Odómetro</th><th>Costo</th><th>Factura</th><th>Nota</th><th>Acciones</th></tr></thead><tbody>{[...filtered.maintenance].sort((a, b) => b.date.localeCompare(a.date) || b.odometer - a.odometer).map(m => <tr key={m.id}><td>{dateLabel(m.date)}<small>{m.date.slice(0, 4)}</small></td><td><strong>{MAINTENANCE_LABELS[m.type]}</strong></td><td>{number(m.odometer)} km</td><td>{money(m.cost)}</td><td>{m.invoice ? 'Sí' : 'No'}{m.supplier && <small>{m.supplier}</small>}</td><td className="note-cell">{m.notes || '—'}</td><td><div className="row-actions"><button className="text-button" onClick={() => edit(m)} aria-label={`Editar mantenimiento del ${m.date}`}>Editar</button><button className="text-button danger" onClick={() => remove(m.id, 'maintenance')} aria-label={`Eliminar mantenimiento del ${m.date}`}>Eliminar</button></div></td></tr>)}</tbody></table></div> : <p className="muted">Todavía no hay mantenimientos en este período.</p>}<p className="calculation-note">Los costos de mantenimiento se restan del saldo registrado y entran en el gasto por km.</p></section>
         </>}
+        {tab === 'Gastos' && <>
+          <section className="panel"><div className="section-heading"><h2>{editing ? 'Editar gasto' : 'Nuevo gasto'}</h2><span className="small-badge">REGISTRO MANUAL</span></div><form key={formKey} onSubmit={saveExpense}><div className="form-grid">
+            <Field label="Fecha del pago" name="date" type="date" value={editing?.date ?? today()}/>
+            <label className="field">Categoría<select name="category" defaultValue={editExpense?.category ?? 'cuota'}>{EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{EXPENSE_LABELS[c]}</option>)}</select></label>
+            <Field label="Monto pagado (USD)" name="cost" value={editExpense?.cost} min={0.01} max={100000}/>
+            <Field label="Proveedor (opcional)" name="supplier" type="text" required={false} value={editExpense?.supplier} placeholder="Ej. banco, aseguradora, operadora"/>
+            <div className="checks"><Check label="Tengo factura a mi RUC" name="invoice" checked={editExpense?.invoice}/></div>
+          </div><label className="field notes">Nota opcional<textarea name="notes" maxLength={500} defaultValue={editExpense?.notes} placeholder="Por ejemplo: cuota 12 de 48"/></label>{formActions('Guardar gasto')}</form></section>
+          <section className="panel"><div className="section-heading"><h2>Historial de gastos</h2><span className="muted">{filtered.expenses.length} registros · {money(stats.expenses)}</span></div>{filtered.expenses.length && !invalidRange ? <div className="table-scroll"><table><thead><tr><th>Fecha</th><th>Categoría</th><th>Monto</th><th>Factura</th><th>Nota</th><th>Acciones</th></tr></thead><tbody>{[...filtered.expenses].sort((a, b) => b.date.localeCompare(a.date)).map(x => <tr key={x.id}><td>{dateLabel(x.date)}<small>{x.date.slice(0, 4)}</small></td><td><strong>{EXPENSE_LABELS[x.category]}</strong></td><td>{money(x.cost)}</td><td>{x.invoice ? 'Sí' : 'No'}{x.supplier && <small>{x.supplier}</small>}</td><td className="note-cell">{x.notes || '—'}</td><td><div className="row-actions"><button className="text-button" onClick={() => edit(x)} aria-label={`Editar gasto del ${x.date}`}>Editar</button><button className="text-button" onClick={() => repeat(x)} aria-label={`Repetir gasto del ${x.date} con fecha de hoy`}>Repetir</button><button className="text-button danger" onClick={() => remove(x.id, 'expenses')} aria-label={`Eliminar gasto del ${x.date}`}>Eliminar</button></div></td></tr>)}</tbody></table></div> : <p className="muted">Todavía no hay gastos en este período.</p>}
+            {expensesByCategory.length > 0 && !invalidRange && <><h2 style={{ marginTop: '22px' }}>Por categoría</h2><div className="table-scroll"><table><thead><tr><th>Categoría</th><th>Pagos</th><th>Total</th></tr></thead><tbody>{expensesByCategory.map(c => <tr key={c.category}><td style={{ whiteSpace: 'normal' }}><strong>{EXPENSE_LABELS[c.category]}</strong></td><td>{c.count}</td><td>{money(c.total)}</td></tr>)}</tbody></table></div></>}
+            <p className="calculation-note">Anota cada pago el día que lo haces. Un pago anual cuenta completo en el mes en que lo pagas. «Repetir» copia un pago con la fecha de hoy, útil para la cuota o el plan de cada mes. Peajes y parqueos van en la jornada; gasolina y talleres, en sus pestañas.</p></section>
+        </>}
         {tab === 'Mis datos' && <div className="settings-grid">
-          <section className="panel"><span className="round-icon"><Icon kind="Mis datos"/></span><h2>Una copia para estar tranquilo</h2><p>Descarga todos los registros del modo actual. Para restaurarlos, usa un respaldo de datos reales de esta aplicación.</p><p className="muted">{data.shifts.length} jornadas · {data.fuel.length} cargas · {data.maintenance.length} mantenimientos · {mode === 'demo' ? 'Datos de ejemplo' : 'Datos reales'}{mode === 'real' && <><br/>Último respaldo: {settings.lastBackupAt ? `${dateLabel(settings.lastBackupAt.slice(0, 10))} ${settings.lastBackupAt.slice(0, 4)}` : 'nunca'}</>}</p><div className="stack"><button onClick={exportBackup} disabled={Boolean(loadError) && mode === 'real'}>Descargar respaldo {mode === 'demo' ? 'de ejemplo' : ''}</button><button className="outline" disabled={mode === 'demo'} onClick={() => importRef.current?.click()}>Restaurar respaldo real</button><input ref={importRef} type="file" accept=".json,application/json" hidden onChange={e => void restore(e.target.files?.[0])}/>{loadError && loadedRef.current.raw && <button className="outline" onClick={() => download(loadedRef.current.raw!, 'uber-recuperacion.json')}>Descargar archivo de recuperación</button>}</div><p className="calculation-note">Restaurar reemplaza tus registros y pide confirmación. Descarga primero una copia de tus datos actuales.</p></section>
+          <section className="panel"><span className="round-icon"><Icon kind="Mis datos"/></span><h2>Una copia para estar tranquilo</h2><p>Descarga todos los registros del modo actual. Para restaurarlos, usa un respaldo de datos reales de esta aplicación.</p><p className="muted">{data.shifts.length} jornadas · {data.fuel.length} cargas · {data.maintenance.length} mantenimientos · {data.expenses.length} gastos fijos · {mode === 'demo' ? 'Datos de ejemplo' : 'Datos reales'}{mode === 'real' && <><br/>Último respaldo: {settings.lastBackupAt ? `${dateLabel(settings.lastBackupAt.slice(0, 10))} ${settings.lastBackupAt.slice(0, 4)}` : 'nunca'}</>}</p><div className="stack"><button onClick={exportBackup} disabled={Boolean(loadError) && mode === 'real'}>Descargar respaldo {mode === 'demo' ? 'de ejemplo' : ''}</button><button className="outline" disabled={mode === 'demo'} onClick={() => importRef.current?.click()}>Restaurar respaldo real</button><input ref={importRef} type="file" accept=".json,application/json" hidden onChange={e => void restore(e.target.files?.[0])}/>{loadError && loadedRef.current.raw && <button className="outline" onClick={() => download(loadedRef.current.raw!, 'uber-recuperacion.json')}>Descargar archivo de recuperación</button>}</div><p className="calculation-note">Restaurar reemplaza tus registros y pide confirmación. Descarga primero una copia de tus datos actuales.</p></section>
           <section className="panel"><span className="round-icon"><Icon kind="car"/></span><h2>Tu Vehículo y Preferencias</h2><p>Personaliza tu bitácora con los datos de tu vehículo y ciudad. Se almacenan 100% en este dispositivo para tu total privacidad.</p><form onSubmit={saveVehicle} style={{ marginTop: '14px' }}><div style={{ display: 'grid', gap: '14px' }}><label className="field">Modelo del vehículo<input name="model" type="text" defaultValue={settings.model} placeholder="Ej. Kia Stonic, Chevrolet Onix, etc."/></label><label className="field">Placa / ID (opcional)<input name="plate" type="text" defaultValue={settings.plate} placeholder="Ej. GXX-1234"/></label><label className="field">Ciudad / Ubicación<input name="city" type="text" defaultValue={settings.city} placeholder="Ej. Guayaquil, Quito, etc."/></label></div><div className="form-actions" style={{ marginTop: '16px' }}><button type="submit">Guardar preferencias</button></div></form></section>
           <section className="panel"><h2>Meta diaria y apartados</h2><p>Define cuánto quieres ganar al día y qué porcentaje de tus ingresos separas en sobres. Usa 0 para desactivar.</p><form key={`goals-${formKey}`} onSubmit={saveGoals}><div className="form-grid two">
             <Field label="Meta diaria de ingresos (USD)" name="dailyGoal" required={false} value={settings.dailyGoal} max={100000}/>

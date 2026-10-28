@@ -37,3 +37,11 @@ Equipo Linux; Node 24.19.0.
 - Imagen Docker local: `/health` 200; en Chromium sin interfaz, por `http://` a la IP del contenedor (contexto no seguro) se guarda una jornada, persiste al recargar y no hay errores de consola. Igual en `127.0.0.1` (contexto seguro).
 - Al guardar, la app pide almacenamiento persistente (`navigator.storage.persist`). Sin efecto en `http://`.
 - No probado: despliegue real en Coolify, la autenticación básica de Coolify ni el certificado del dominio `sslip.io`.
+
+## Gastos fijos (28 de octubre de 2026)
+
+- Nueva pestaña Gastos: cuota del vehículo, seguro, matrícula y revisión, celular, lavado y otros gastos del negocio, con proveedor, factura y nota. «Repetir» copia un pago con la fecha de hoy. Se restan del saldo registrado, entran en el gasto por km y en el reporte mensual (con y sin factura).
+- Formato interno version 3. Migración desde version 1 y 2; la primera escritura copia el original en `uber-driver-ai:real:v1:respaldo-AAAA-MM-DD`.
+- 50 pruebas automatizadas aprobadas (migración v2 a v3 en almacenamiento y respaldo, saldo, gasto por km, validación, reporte), TypeScript y compilación aprobados.
+- Revisión en Chromium sin interfaz sobre la compilación de producción: datos v2 en localStorage, guardado de dos gastos (uno con «Repetir»), copia de migración idéntica al v2 original, saldo y tarjeta de gastos fijos correctos, persistencia al recargar, 390 px sin desplazamiento horizontal y sin errores de consola.
+- No probado: restauración de un respaldo v2 mediante el selector de archivos (cubierto solo por pruebas automatizadas).

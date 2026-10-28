@@ -17,7 +17,7 @@ export function loadData(store: Store): Loaded {
 }
 
 /**
- * Guarda en formato v2. Antes de la primera escritura sobre datos v1 (o dañados al restaurar)
+ * Guarda en formato v3. Antes de la primera escritura sobre datos v1 o v2 (o dañados al restaurar)
  * copia el texto original en una clave de respaldo con la fecha.
  */
 export function saveData(store: Store, loaded: Loaded, next: Data, restoring = false): Loaded {

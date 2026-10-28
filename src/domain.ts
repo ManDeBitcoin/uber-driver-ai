@@ -19,12 +19,17 @@ export type Maintenance = {
   id: string; date: string; odometer: number; type: MaintenanceType; cost: number; notes: string;
   invoice: boolean; supplier: string;
 };
-export type Data = { version: 2; shifts: Shift[]; fuel: Fuel[]; maintenance: Maintenance[] };
+export const EXPENSE_CATEGORIES = ['cuota', 'seguro', 'matricula', 'celular', 'lavado', 'otro'] as const;
+export type ExpenseCategory = typeof EXPENSE_CATEGORIES[number];
+export const EXPENSE_LABELS: Record<ExpenseCategory, string> = { cuota: 'Cuota o préstamo del vehículo', seguro: 'Seguro del vehículo', matricula: 'Matrícula y revisión técnica', celular: 'Plan de celular e internet', lavado: 'Lavado y limpieza', otro: 'Otro gasto del negocio' };
+/** Gastos fijos o del negocio que no pertenecen a una jornada: se anotan el día en que se pagan. */
+export type Expense = { id: string; date: string; category: ExpenseCategory; cost: number; notes: string; invoice: boolean; supplier: string };
+export type Data = { version: 3; shifts: Shift[]; fuel: Fuel[]; maintenance: Maintenance[]; expenses: Expense[] };
 export type Backup = { app: 'uber-driver-ai' | 'stonic-driver-ai'; mode: 'demo' | 'real'; exportedAt: string; data: Data };
 export const STORAGE_KEY = 'uber-driver-ai:real:v1';
 export const LEGACY_STORAGE_KEY = 'stonic-driver-ai:real:v1';
 export const SETTINGS_KEY = 'uber-driver-ai:settings:v1';
-export const emptyData = (): Data => ({ version: 2, shifts: [], fuel: [], maintenance: [] });
+export const emptyData = (): Data => ({ version: 3, shifts: [], fuel: [], maintenance: [], expenses: [] });
 export const money = (n: number) => new Intl.NumberFormat('es-EC', { style: 'currency', currency: 'USD' }).format(n);
 export const number = (n: number) => new Intl.NumberFormat('es-EC', { maximumFractionDigits: 3 }).format(n);
 export const today = () => new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
@@ -72,27 +77,33 @@ export function validFuel(value: unknown): value is Fuel {
 export function validMaintenance(value: unknown): value is Maintenance {
   return record(value) && base(value) && numeric(value.odometer, 2000000) && MAINTENANCE_TYPES.includes(value.type as MaintenanceType) && numeric(value.cost, 100000) && validSupplier(value);
 }
-/** Convierte registros v1 al formato v2 con los campos nuevos vacíos. */
+export function validExpense(value: unknown): value is Expense {
+  return record(value) && base(value) && EXPENSE_CATEGORIES.includes(value.category as ExpenseCategory) && numeric(value.cost, 100000, 0.01) && validSupplier(value);
+}
+/** Convierte registros v1 y v2 al formato v3 con los campos nuevos vacíos. */
 function upgrade(value: Record<string, unknown>): Record<string, unknown> {
-  if (value.version !== 1 || !Array.isArray(value.shifts) || !Array.isArray(value.fuel)) return value;
-  return {
+  let v = value;
+  if (v.version === 1 && Array.isArray(v.shifts) && Array.isArray(v.fuel)) v = {
     version: 2,
-    shifts: value.shifts.map(s => record(s) ? { ...s, odometerStart: null, odometerEnd: null, setAside: 0, slots: null } : s),
-    fuel: value.fuel.map(f => record(f) ? { ...f, fullTank: false, invoice: false, supplier: '' } : f),
+    shifts: v.shifts.map(s => record(s) ? { ...s, odometerStart: null, odometerEnd: null, setAside: 0, slots: null } : s),
+    fuel: v.fuel.map(f => record(f) ? { ...f, fullTank: false, invoice: false, supplier: '' } : f),
     maintenance: [],
   };
+  if (v.version === 2 && Array.isArray(v.maintenance)) v = { ...v, version: 3, expenses: [] };
+  return v;
 }
 export function parseData(input: unknown): Data {
   const value = record(input) ? upgrade(input) : input;
-  if (!record(value) || value.version !== 2 || !Array.isArray(value.shifts) || !Array.isArray(value.fuel) || !Array.isArray(value.maintenance) || value.shifts.length > 20000 || value.fuel.length > 20000 || value.maintenance.length > 20000 || !value.shifts.every(validShift) || !value.fuel.every(validFuel) || !value.maintenance.every(validMaintenance)) throw new Error('El archivo no contiene registros válidos de Uber Driver AI.');
-  const ids = [...value.shifts, ...value.fuel, ...value.maintenance].map(r => r.id);
+  if (!record(value) || value.version !== 3 || !Array.isArray(value.shifts) || !Array.isArray(value.fuel) || !Array.isArray(value.maintenance) || !Array.isArray(value.expenses) || value.shifts.length > 20000 || value.fuel.length > 20000 || value.maintenance.length > 20000 || value.expenses.length > 20000 || !value.shifts.every(validShift) || !value.fuel.every(validFuel) || !value.maintenance.every(validMaintenance) || !value.expenses.every(validExpense)) throw new Error('El archivo no contiene registros válidos de Uber Driver AI.');
+  const ids = [...value.shifts, ...value.fuel, ...value.maintenance, ...value.expenses].map(r => r.id);
   if (new Set(ids).size !== ids.length) throw new Error('Hay registros duplicados en el respaldo.');
   const slots = (s: Slots | null): Slots | null => s && Object.fromEntries(SLOT_NAMES.map(n => [n, { income: s[n].income, trips: s[n].trips, hours: s[n].hours }])) as Slots;
   return {
-    version: 2,
+    version: 3,
     shifts: value.shifts.map(s => ({ id: s.id, date: s.date, hours: s.hours, km: s.km, trips: s.trips, income: s.income, otherCosts: s.otherCosts, notes: s.notes, odometerStart: s.odometerStart, odometerEnd: s.odometerEnd, setAside: s.setAside, slots: slots(s.slots) })),
     fuel: value.fuel.map(f => ({ id: f.id, date: f.date, gallons: f.gallons, cost: f.cost, odometer: f.odometer, notes: f.notes, fullTank: f.fullTank, invoice: f.invoice, supplier: f.supplier })),
     maintenance: value.maintenance.map(m => ({ id: m.id, date: m.date, odometer: m.odometer, type: m.type, cost: m.cost, notes: m.notes, invoice: m.invoice, supplier: m.supplier })),
+    expenses: value.expenses.map(e => ({ id: e.id, date: e.date, category: e.category, cost: e.cost, notes: e.notes, invoice: e.invoice, supplier: e.supplier })),
   };
 }
 export function parseBackup(text: string): Data {
@@ -100,9 +111,9 @@ export function parseBackup(text: string): Data {
   if (!record(value) || (value.app !== 'uber-driver-ai' && value.app !== 'stonic-driver-ai') || value.mode !== 'real') throw new Error('Selecciona un respaldo de tus datos reales. Los ejemplos no se importan.');
   return parseData(value.data);
 }
-/** true si el texto guardado ya está en formato v2. */
+/** true si el texto guardado ya está en formato v3. */
 export function isCurrentFormat(raw: string) {
-  try { const v: unknown = JSON.parse(raw); return record(v) && v.version === 2; } catch { return false; }
+  try { const v: unknown = JSON.parse(raw); return record(v) && v.version === 3; } catch { return false; }
 }
 export const migrationBackupKey = (date: string) => `${STORAGE_KEY}:respaldo-${date}`;
 
@@ -114,8 +125,9 @@ export function summarize(data: Data) {
   const fuelCents = data.fuel.reduce((a, f) => a + cents(f.cost), 0);
   const otherCents = data.shifts.reduce((a, s) => a + cents(s.otherCosts), 0);
   const maintenanceCents = data.maintenance.reduce((a, m) => a + cents(m.cost), 0);
+  const expensesCents = data.expenses.reduce((a, e) => a + cents(e.cost), 0);
   const setAsideCents = data.shifts.reduce((a, s) => a + cents(s.setAside), 0);
-  const balanceCents = incomeCents - fuelCents - otherCents - maintenanceCents;
+  const balanceCents = incomeCents - fuelCents - otherCents - maintenanceCents - expensesCents;
   const hours = data.shifts.reduce((a, s) => a + s.hours, 0);
   const km = data.shifts.reduce((a, s) => a + s.km, 0);
   const trips = data.shifts.reduce((a, s) => a + s.trips, 0);
@@ -126,17 +138,17 @@ export function summarize(data: Data) {
   const totalKm = data.shifts.reduce((a, s) => a + (shiftTotalKm(s) ?? s.km), 0);
   const emptyKm = odometerKm - odometerTripKm;
   return {
-    income: incomeCents / 100, fuel: fuelCents / 100, other: otherCents / 100, maintenance: maintenanceCents / 100, setAside: setAsideCents / 100,
+    income: incomeCents / 100, fuel: fuelCents / 100, other: otherCents / 100, maintenance: maintenanceCents / 100, expenses: expensesCents / 100, setAside: setAsideCents / 100,
     balance: balanceCents / 100, hours, km, trips, totalKm,
     shiftsWithoutOdometer: data.shifts.length - withOdometer.length,
     emptyKm: withOdometer.length ? emptyKm : null, emptyShare: ratio(emptyKm, odometerKm),
     perHour: ratio(incomeCents / 100, hours), balancePerHour: ratio(balanceCents / 100, hours), balancePerKm: ratio(balanceCents / 100, totalKm),
-    costPerKm: ratio((fuelCents + otherCents + maintenanceCents) / 100, totalKm),
+    costPerKm: ratio((fuelCents + otherCents + maintenanceCents + expensesCents) / 100, totalKm),
   };
 }
 export function filterData(data: Data, from: string, to: string): Data {
   const includes = (r: { date: string }) => (!from || r.date >= from) && (!to || r.date <= to);
-  return { version: 2, shifts: data.shifts.filter(includes), fuel: data.fuel.filter(includes), maintenance: data.maintenance.filter(includes) };
+  return { version: 3, shifts: data.shifts.filter(includes), fuel: data.fuel.filter(includes), maintenance: data.maintenance.filter(includes), expenses: data.expenses.filter(includes) };
 }
 
 /** Error si el odómetro de una carga retrocede respecto a cargas de otras fechas; '' si está bien. */
@@ -288,7 +300,7 @@ function csvCell(value: string | number) {
 /** Reporte mensual en CSV (separador ";" y coma decimal, como lo abre Excel en español). month = AAAA-MM. */
 export function monthlyReport(data: Data, month: string): string {
   const inMonth = (r: { date: string }) => r.date.startsWith(`${month}-`);
-  const shifts = data.shifts.filter(inMonth); const fuel = data.fuel.filter(inMonth); const maintenance = data.maintenance.filter(inMonth);
+  const shifts = data.shifts.filter(inMonth); const fuel = data.fuel.filter(inMonth); const maintenance = data.maintenance.filter(inMonth); const expenses = data.expenses.filter(inMonth);
   const header = ['Fecha', 'Tipo', 'Concepto', 'Proveedor', 'Factura', 'Ingreso', 'Gasto', 'Km', 'Horas', 'Nota'];
   const rows: (string | number)[][] = [];
   for (const s of shifts) {
@@ -297,10 +309,12 @@ export function monthlyReport(data: Data, month: string): string {
   }
   for (const f of fuel) rows.push([f.date, 'Combustible', `${number(f.gallons)} galones`, f.supplier, f.invoice ? 'Sí' : 'No', 0, f.cost, 0, 0, f.notes]);
   for (const m of maintenance) rows.push([m.date, 'Mantenimiento', MAINTENANCE_LABELS[m.type], m.supplier, m.invoice ? 'Sí' : 'No', 0, m.cost, 0, 0, m.notes]);
+  for (const e of expenses) rows.push([e.date, 'Gasto fijo', EXPENSE_LABELS[e.category], e.supplier, e.invoice ? 'Sí' : 'No', 0, e.cost, 0, 0, e.notes]);
   rows.sort((a, b) => String(a[0]).localeCompare(String(b[0])));
   const sum = (values: number[]) => values.reduce((a, v) => a + cents(v), 0) / 100;
-  const withInvoice = sum([...fuel.filter(f => f.invoice).map(f => f.cost), ...maintenance.filter(m => m.invoice).map(m => m.cost)]);
-  const withoutInvoice = sum([...fuel.filter(f => !f.invoice).map(f => f.cost), ...maintenance.filter(m => !m.invoice).map(m => m.cost), ...shifts.map(s => s.otherCosts)]);
+  const purchases = [...fuel, ...maintenance, ...expenses];
+  const withInvoice = sum(purchases.filter(r => r.invoice).map(r => r.cost));
+  const withoutInvoice = sum([...purchases.filter(r => !r.invoice).map(r => r.cost), ...shifts.map(s => s.otherCosts)]);
   const totals: (string | number)[][] = [
     ['', 'Total', 'Ingresos', '', '', sum(shifts.map(s => s.income)), 0, 0, 0, ''],
     ['', 'Total', 'Gastos con factura', '', 'Sí', 0, withInvoice, 0, 0, ''],
@@ -321,5 +335,6 @@ export function demoData(): Data {
     const odometerStart = odometer; odometer += tripKm[index] + emptyKm[index];
     return { id: `demo-shift-${index}`, date: date.toISOString().slice(0, 10), income, hours: [5, 6, 5.5, 7, 8, 6, 7.5][index], km: tripKm[index], trips: [12, 16, 14, 19, 22, 17, 20][index], otherCosts: index % 2 ? 2.50 : 0, notes: 'Ejemplo de práctica', odometerStart, odometerEnd: odometer, setAside: index % 2 ? 10 : 5, slots: null };
   });
-  return { version: 2, shifts, fuel: [1, 4].map((i) => ({ id: `demo-fuel-${i}`, date: shifts[i].date, gallons: 9, cost: 25.50, odometer: shifts[i].odometerStart!, notes: 'Carga ficticia; no representa precios actuales.', fullTank: true, invoice: i === 4, supplier: i === 4 ? 'Estación de ejemplo' : '' })), maintenance: [] };
+  return { version: 3, shifts, fuel: [1, 4].map((i) => ({ id: `demo-fuel-${i}`, date: shifts[i].date, gallons: 9, cost: 25.50, odometer: shifts[i].odometerStart!, notes: 'Carga ficticia; no representa precios actuales.', fullTank: true, invoice: i === 4, supplier: i === 4 ? 'Estación de ejemplo' : '' })), maintenance: [],
+    expenses: [{ id: 'demo-expense-0', date: shifts[0].date, category: 'celular', cost: 15, notes: 'Gasto ficticio.', invoice: false, supplier: '' }] };
 }

@@ -62,13 +62,14 @@ Notas:
 4. O usa **Importar de Uber (CSV)** para cargar tu extracto oficial de `drivers.uber.com`, con vista previa interactiva y detección de duplicados.
 5. Abre **Combustible** para registrar tus cargas de gasolina con fecha, galones, costo y odómetro. Marca **Llené el tanque** para calcular el consumo real (km/galón y costo por km).
 6. Abre **Mantenimiento** para anotar aceite, filtros, frenos, llantas, etc. En **Mis datos** llena los intervalos según el manual de tu vehículo para recibir avisos.
-7. En **Mis datos** define tu meta diaria, horas máximas y los porcentajes para mantenimiento e impuestos.
-8. En **Mis datos**, pulsa **Descargar respaldo** y guarda una copia JSON regularmente. Si pasan más de 7 días con cambios nuevos, Resumen te lo recuerda.
-9. Cada mes, descarga el **Reporte del mes** (CSV) para tu contador.
+7. Abre **Gastos** para anotar cada pago fijo el día que lo haces: cuota del vehículo, seguro, matrícula y revisión, plan de celular, lavado u otro gasto del negocio. Se restan del saldo registrado. Con **Repetir** copias un pago mensual con la fecha de hoy.
+8. En **Mis datos** define tu meta diaria, horas máximas y los porcentajes para mantenimiento e impuestos.
+9. En **Mis datos**, pulsa **Descargar respaldo** y guarda una copia JSON regularmente. Si pasan más de 7 días con cambios nuevos, Resumen te lo recuerda.
+10. Cada mes, descarga el **Reporte del mes** (CSV) para tu contador. Incluye los gastos fijos con y sin factura.
 
 ## 6. Privacidad y almacenamiento local
 
-- Los registros personales viven en `localStorage` bajo la clave `uber-driver-ai:real:v1` (formato interno versión 2, con migración automática desde la versión 1; el original se copia en `uber-driver-ai:real:v1:respaldo-AAAA-MM-DD`).
+- Los registros personales viven en `localStorage` bajo la clave `uber-driver-ai:real:v1` (formato interno versión 3, con migración automática desde las versiones 1 y 2; el original se copia en `uber-driver-ai:real:v1:respaldo-AAAA-MM-DD`).
 - La configuración (vehículo, metas, intervalos de mantenimiento y fecha del último respaldo) vive en `uber-driver-ai:settings:v1`. No va dentro del respaldo JSON.
 - Ningún dato personal (tu carro, tu ciudad, tus placas, tus ingresos ni tus reportes CSV) se incluye en el código ni se transmite a servidores remotos.
 - El repositorio público se mantiene limpio y sin información privada.
@@ -80,4 +81,4 @@ npm.cmd test
 npm.cmd run build
 ```
 
-Las pruebas cubren cálculos de jornadas, odómetro, saldo por hora y por km, consumo con tanque lleno, mantenimiento, metas y apartados, mejores días, franjas horarias del CSV de Uber, reporte mensual, migración v1 a v2 y respaldos JSON.
+Las pruebas cubren cálculos de jornadas, odómetro, saldo por hora y por km, consumo con tanque lleno, mantenimiento, metas y apartados, mejores días, franjas horarias del CSV de Uber, gastos fijos, reporte mensual, migración v1 y v2 a v3 y respaldos JSON.

@@ -14,13 +14,25 @@ test('la primera escritura sobre datos v1 copia el original a una clave de respa
   const store = memory({ [STORAGE_KEY]: v1 });
   const loaded = loadData(store);
   assert.equal(loaded.error, '');
-  assert.equal(loaded.data.version, 2);
+  assert.equal(loaded.data.version, 3);
   const saved = saveData(store, loaded, loaded.data);
   assert.equal(store.items.get(migrationBackupKey(today())), v1);
-  assert.equal(JSON.parse(store.items.get(STORAGE_KEY)!).version, 2);
+  assert.equal(JSON.parse(store.items.get(STORAGE_KEY)!).version, 3);
   store.items.delete(migrationBackupKey(today()));
   saveData(store, saved, saved.data);
   assert.equal(store.items.has(migrationBackupKey(today())), false);
+});
+test('la primera escritura sobre datos v2 copia el original y guarda en v3 con gastos vacíos', () => {
+  const v2 = JSON.stringify({ version: 2, shifts: JSON.parse(v1).shifts.map((s: object) => ({ ...s, odometerStart: null, odometerEnd: null, setAside: 0, slots: null })), fuel: [], maintenance: [] });
+  const store = memory({ [STORAGE_KEY]: v2 });
+  const loaded = loadData(store);
+  assert.equal(loaded.error, '');
+  assert.equal(loaded.data.shifts.length, 2);
+  saveData(store, loaded, loaded.data);
+  assert.equal(store.items.get(migrationBackupKey(today())), v2);
+  const stored = JSON.parse(store.items.get(STORAGE_KEY)!);
+  assert.equal(stored.version, 3);
+  assert.deepEqual(stored.expenses, []);
 });
 test('no sobrescribe una copia de migración ya existente del mismo día', () => {
   const store = memory({ [STORAGE_KEY]: v1, [migrationBackupKey(today())]: 'anterior' });
