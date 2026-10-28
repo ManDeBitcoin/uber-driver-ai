@@ -41,7 +41,7 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
-            type=raw,value=0.1.1
+            type=raw,value=0.1.2
             type=semver,pattern={{version}}
 
       - name: Build and push Multi-arch Docker image

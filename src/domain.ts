@@ -28,6 +28,12 @@ export const emptyData = (): Data => ({ version: 2, shifts: [], fuel: [], mainte
 export const money = (n: number) => new Intl.NumberFormat('es-EC', { style: 'currency', currency: 'USD' }).format(n);
 export const number = (n: number) => new Intl.NumberFormat('es-EC', { maximumFractionDigits: 3 }).format(n);
 export const today = () => new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+/** crypto.randomUUID solo existe con HTTPS o 127.0.0.1; getRandomValues también funciona en http://. */
+export function newId(c: Pick<Crypto, 'getRandomValues'> & { randomUUID?: () => string } = crypto): string {
+  if (typeof c.randomUUID === 'function') return c.randomUUID();
+  const hex = Array.from(c.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
 export const dateLabel = (date: string) => new Intl.DateTimeFormat('es-EC', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${date}T12:00:00Z`));
 export function validDate(value: unknown): value is string {
   return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value)) && new Date(`${value}T12:00:00Z`).toISOString().slice(0, 10) === value;

@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
-import { byWeekday, bySlot, currentOdometer, dateLabel, demoData, emptyData, envelopes, estimatedProfit, filterData, fuelEconomy, fuelOdometerProblem, MAINTENANCE_LABELS, MAINTENANCE_TYPES, maintenanceMessage, maintenanceStatus, money, monthlyReport, number, parseBackup, parseData, parseSettings, SETTINGS_KEY, settingsProblem, shiftProblem, shiftTotalKm, summarize, today, validFuel, validMaintenance, validShift } from './domain.ts';
+import { byWeekday, bySlot, currentOdometer, dateLabel, demoData, emptyData, envelopes, estimatedProfit, filterData, fuelEconomy, fuelOdometerProblem, MAINTENANCE_LABELS, MAINTENANCE_TYPES, maintenanceMessage, maintenanceStatus, money, monthlyReport, newId, number, parseBackup, parseData, parseSettings, SETTINGS_KEY, settingsProblem, shiftProblem, shiftTotalKm, summarize, today, validFuel, validMaintenance, validShift } from './domain.ts';
 import type { Backup, Data, Fuel, Intervals, Maintenance, MaintenanceType, Settings, Shift } from './domain.ts';
 import { loadData, saveData } from './storage.ts';
 import { parseUberCsv } from './uberCsv.ts';
@@ -107,6 +107,8 @@ export default function App() {
       if (mode === 'demo') { setDemo(parseData(next)); return true; }
       loadedRef.current = saveData(localStorage, loadedRef.current, next, restoring);
       setReal(loadedRef.current.data); setLoadError('');
+      // Pide al navegador no borrar los registros cuando falte espacio. Solo existe con HTTPS.
+      void navigator.storage?.persist?.();
       if (!settings.changedSinceBackup) storeSettings({ ...settings, changedSinceBackup: true });
       return true;
     } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo guardar. Descarga un respaldo antes de cerrar.'); return false; }
@@ -114,7 +116,7 @@ export default function App() {
   function saved(noun: string, adjective = 'guardada') { setEditing(null); setFormKey(k => k + 1); setMessage(mode === 'demo' ? `${noun} de práctica ${adjective}. No afecta tus datos reales.` : `${noun} ${adjective} en este navegador.`); }
   function saveShift(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); const form = new FormData(event.currentTarget);
-    const s: Shift = { id: editing?.id ?? crypto.randomUUID(), date: String(form.get('date')), hours: Number(form.get('hours')), km: Number(form.get('km')), trips: Number(form.get('trips')), income: Number(form.get('income')), otherCosts: Number(form.get('otherCosts')), notes: String(form.get('notes')).trim(), odometerStart: optionalNumber(form.get('odometerStart')), odometerEnd: optionalNumber(form.get('odometerEnd')), setAside: Number(form.get('setAside')), slots: (editing as Shift | null)?.slots ?? null };
+    const s: Shift = { id: editing?.id ?? newId(), date: String(form.get('date')), hours: Number(form.get('hours')), km: Number(form.get('km')), trips: Number(form.get('trips')), income: Number(form.get('income')), otherCosts: Number(form.get('otherCosts')), notes: String(form.get('notes')).trim(), odometerStart: optionalNumber(form.get('odometerStart')), odometerEnd: optionalNumber(form.get('odometerEnd')), setAside: Number(form.get('setAside')), slots: (editing as Shift | null)?.slots ?? null };
     const problem = shiftProblem(s);
     if (problem) { setError(problem); return; }
     if (!validShift(s)) { setError('Revisa las cifras y la fecha de la jornada.'); return; }
@@ -125,7 +127,7 @@ export default function App() {
   }
   function saveFuel(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); const form = new FormData(event.currentTarget);
-    const f: Fuel = { id: editing?.id ?? crypto.randomUUID(), date: String(form.get('date')), gallons: Number(form.get('gallons')), cost: Number(form.get('cost')), odometer: Number(form.get('odometer')), notes: String(form.get('notes')).trim(), fullTank: form.get('fullTank') === 'on', invoice: form.get('invoice') === 'on', supplier: String(form.get('supplier') ?? '').trim() };
+    const f: Fuel = { id: editing?.id ?? newId(), date: String(form.get('date')), gallons: Number(form.get('gallons')), cost: Number(form.get('cost')), odometer: Number(form.get('odometer')), notes: String(form.get('notes')).trim(), fullTank: form.get('fullTank') === 'on', invoice: form.get('invoice') === 'on', supplier: String(form.get('supplier') ?? '').trim() };
     if (!validFuel(f)) { setError('Revisa las cifras y la fecha de la carga.'); return; }
     const problem = fuelOdometerProblem(data.fuel, f);
     if (problem) { setError(problem); return; }
@@ -133,7 +135,7 @@ export default function App() {
   }
   function saveMaintenance(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); const form = new FormData(event.currentTarget);
-    const m: Maintenance = { id: editing?.id ?? crypto.randomUUID(), date: String(form.get('date')), odometer: Number(form.get('odometer')), type: String(form.get('type')) as MaintenanceType, cost: Number(form.get('cost')), notes: String(form.get('notes')).trim(), invoice: form.get('invoice') === 'on', supplier: String(form.get('supplier') ?? '').trim() };
+    const m: Maintenance = { id: editing?.id ?? newId(), date: String(form.get('date')), odometer: Number(form.get('odometer')), type: String(form.get('type')) as MaintenanceType, cost: Number(form.get('cost')), notes: String(form.get('notes')).trim(), invoice: form.get('invoice') === 'on', supplier: String(form.get('supplier') ?? '').trim() };
     if (!validMaintenance(m)) { setError('Revisa las cifras, el tipo y la fecha del mantenimiento.'); return; }
     if (commit({ ...data, maintenance: editing ? data.maintenance.map(r => r.id === m.id ? m : r) : [...data.maintenance, m] })) saved('Mantenimiento', 'guardado');
   }

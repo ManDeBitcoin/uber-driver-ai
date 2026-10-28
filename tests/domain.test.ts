@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { byWeekday, defaultSettings, demoData, emptyData, envelopes, filterData, fuelEconomy, fuelOdometerProblem, maintenanceMessage, maintenanceStatus, monthlyReport, parseBackup, parseData, parseSettings, settingsProblem, shiftProblem, summarize, validDate, validFuel, validShift } from '../src/domain.ts';
+import { byWeekday, defaultSettings, demoData, emptyData, envelopes, filterData, fuelEconomy, fuelOdometerProblem, maintenanceMessage, maintenanceStatus, monthlyReport, newId, parseBackup, parseData, parseSettings, settingsProblem, shiftProblem, summarize, validDate, validFuel, validShift } from '../src/domain.ts';
 import type { Data, Fuel, Intervals, Maintenance, Shift } from '../src/domain.ts';
 
 const shift: Shift = { id: 'one', date: '2026-10-19', hours: 5, km: 100, trips: 12, income: 50.10, otherCosts: 2.20, notes: '', odometerStart: null, odometerEnd: null, setAside: 0, slots: null };
@@ -223,4 +223,12 @@ test('reporte mensual: separa gastos con y sin factura y escapa caracteres espec
   assert.ok(report.includes(';Total;Gastos con factura;;Sí;0,00;24,50;'));
   assert.ok(report.includes(';Total;Gastos sin factura;;No;0,00;42,20;'));
   assert.ok(!report.includes('2026-09-30'));
+});
+
+test('genera IDs aunque el navegador no tenga crypto.randomUUID (http://)', () => {
+  const insecure = { getRandomValues: <T extends ArrayBufferView | null>(array: T) => crypto.getRandomValues(array as Uint8Array) as T };
+  const ids = new Set(Array.from({ length: 50 }, () => newId(insecure)));
+  assert.equal(ids.size, 50);
+  for (const id of ids) assert.match(id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+  assert.equal(newId({ getRandomValues: insecure.getRandomValues, randomUUID: () => 'nativo' }), 'nativo');
 });

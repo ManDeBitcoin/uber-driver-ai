@@ -29,3 +29,11 @@ Equipo Linux; Node 24.19.0.
 - Encabezados verificados con curl: CSP, X-Frame-Options, nosniff, Referrer-Policy y Permissions-Policy en todas las respuestas; `index.html` con `no-cache` y `/assets/` con caché de un año (un solo Cache-Control).
 - La aplicación carga en Chromium con la CSP activa, sin errores de consola, y la descarga del respaldo funciona.
 - No probado: despliegue real en una instancia de Coolify ni el certificado HTTPS del dominio.
+
+## Uso privado en Coolify con dominio generado (28 de octubre de 2026)
+
+- Arreglo: los IDs de registros usaban `crypto.randomUUID`, que no existe en `http://` (por ejemplo, el dominio `sslip.io` que genera Coolify sin certificado). Guardar una jornada fallaba. Ahora se usa `crypto.getRandomValues` cuando falta.
+- 46 pruebas automatizadas aprobadas (incluye IDs sin `randomUUID`), TypeScript y compilación de producción aprobados.
+- Imagen Docker local: `/health` 200; en Chromium sin interfaz, por `http://` a la IP del contenedor (contexto no seguro) se guarda una jornada, persiste al recargar y no hay errores de consola. Igual en `127.0.0.1` (contexto seguro).
+- Al guardar, la app pide almacenamiento persistente (`navigator.storage.persist`). Sin efecto en `http://`.
+- No probado: despliegue real en Coolify, la autenticación básica de Coolify ni el certificado del dominio `sslip.io`.

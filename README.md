@@ -32,21 +32,26 @@ Esta aplicación incluye empaquetado nativo para Umbrel OS:
 - Tienda comunitaria: `umbrel-app-store.yml`
 - Imagen de contenedor multi-arquitectura: `ghcr.io/mandebitcoin/uber-driver-ai` (puerto `5174` en Umbrel).
 
-## 4. Coolify (servidor propio)
+## 4. Coolify (servidor propio, privado, sin dominio personalizado)
 
 La imagen es estática: nginx entrega la aplicación y los registros siguen en el navegador de cada dispositivo. El servidor no guarda datos, no necesita volumen ni variables de entorno.
 
 1. En Coolify: **+ New** → **Public Repository** (o **Private Repository (GitHub App)** si haces el repo privado).
-2. URL: `https://github.com/ManDeBitcoin/uber-driver-ai`, rama `main` (o la rama que quieras desplegar).
+2. URL: `https://github.com/ManDeBitcoin/uber-driver-ai`, rama `main`.
 3. **Build Pack**: `Dockerfile`. **Base Directory**: `/`. **Dockerfile Location**: `/Dockerfile`.
-4. **Ports Exposes**: `80`. No publiques puertos en el host (deja **Ports Mappings** vacío); Coolify enruta por dominio.
-5. **Domains**: tu dominio con `https://` (por ejemplo `https://bitacora.tudominio.com`). Coolify emite el certificado.
-6. **Health Check**: activado, ruta `/health`, puerto `80`.
-7. **Deploy**. Para actualizar, vuelve a desplegar (o activa el despliegue automático con el webhook de GitHub).
+4. **Ports Exposes**: `80`. Deja **Ports Mappings** vacío; Coolify enruta por dominio.
+5. **Domains**: pulsa **Generate Domain**. Sin dominio propio, Coolify crea uno tipo `http://<id>.<ip-del-servidor>.sslip.io`. Cambia `http://` por `https://` y guarda **antes de registrar datos**: `http://` y `https://` son direcciones distintas y cada una tiene su propio almacenamiento.
+6. **Configuration → General → Security → Authentication**: elige **HTTP Basic Authentication**, pon un usuario y una contraseña larga y guarda. Deja **Label management** en «Managed by Coolify». Si tu versión de Coolify no muestra esa opción, usa el middleware `basicauth` de Traefik con etiquetas ([guía de Coolify](https://coolify.io/docs/core/networking/proxy/traefik/basic-auth)).
+7. **Health Check**: activado, ruta `/health`, puerto `80`. Se ejecuta dentro del contenedor, así que la contraseña no lo bloquea.
+8. **Deploy**. Abre el dominio en una ventana de incógnito: debe pedir usuario y contraseña antes de mostrar la app. Para actualizar, vuelve a desplegar.
+
+Si el navegador avisa de un certificado no válido, Let's Encrypt no pudo emitirlo (puertos 80 y 443 cerrados o servidor sin IP pública) y Coolify usa uno autofirmado. La app funciona igual en `http://`, pero la contraseña de la autenticación básica viaja sin cifrar.
 
 Notas:
 - Tu dominio de Coolify es una dirección distinta de `127.0.0.1:5173` y de Umbrel: empieza vacía. Pasa tus datos con **Descargar respaldo** y **Restaurar respaldo real**.
-- La aplicación queda accesible en internet para quien conozca el dominio. No expone registros de nadie (viven en cada navegador), pero si prefieres que solo tú la abras, protege el dominio con autenticación básica en el proxy de Coolify (middleware `basicauth` de Traefik mediante etiquetas personalizadas) o déjala detrás de una VPN.
+- Elige un solo dispositivo y navegador para registrar (por ejemplo, el navegador de tu celular). Otro dispositivo no ve esos registros: no hay sincronización.
+- Al guardar el primer registro con `https://`, la app pide al navegador almacenamiento persistente para que no lo borre cuando falte espacio.
+- En iPhone, Safari puede borrar los datos de un sitio que no abres durante 7 días de uso del navegador. Descarga el respaldo cada semana y guárdalo fuera del celular.
 - `index.html` se sirve sin caché y los archivos de `/assets/` con caché larga, así que cada despliegue se ve al recargar.
 
 ## 5. Tu primer recorrido, paso a paso

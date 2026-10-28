@@ -1,5 +1,5 @@
 import type { Shift, SlotName, Slots } from './domain.ts';
-import { SLOT_NAMES, validDate, validShift } from './domain.ts';
+import { newId, SLOT_NAMES, validDate, validShift } from './domain.ts';
 
 export type UberImportResult = {
   shifts: Shift[];
@@ -460,7 +460,7 @@ export function parseUberCsv(csvText: string): UberImportResult {
     if (roundedHours > 24) roundedHours = 24;
 
     const shiftCandidate: Shift = {
-      id: crypto.randomUUID(),
+      id: newId(),
       date,
       trips: acc.trips,
       hours: roundedHours,
